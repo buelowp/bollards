@@ -6,11 +6,8 @@
 #define NEOPIXEL_PIN    SCK
 #define NUMPIXELS       24
 
-#define BLINK_PERIOD    3000 // milliseconds until cycle repeat
-#define BLINK_DURATION  100  // milliseconds LED is on for
-
-#define MESH_PREFIX         "pathlights"
-#define MESH_PASSWORD       "somethingSneaky"
+#define MESH_PREFIX         "bollards"
+#define MESH_PASSWORD       "bollards4thewin"
 #define MESH_PORT           5555
 
 Adafruit_NeoPixel pixels(NUMPIXELS, NEOPIXEL_PIN, NEO_RGBW + NEO_KHZ800);
@@ -20,21 +17,35 @@ Scheduler     userScheduler; // to control your personal task
 painlessMesh  mesh;
 Task taskSendMessage(TASK_SECOND * 5, TASK_FOREVER, &sendHeartbeat);
 
-bool calc_delay = false;
-SimpleList<uint32_t> nodes;
 uint32_t g_gatewayNode = 0;
-uint32_t g_heartbeat = 0;
+uint32_t g_heartbeat = 1;
+
+void sendToGateway(String &payload)
+{
+    if (g_gatewayNode > 0) {
+        mesh.sendSingle(g_gatewayNode, payload);
+    }
+    else {
+        mesh.sendBroadcast(payload);
+    }
+}
 
 void sendHeartbeat() 
 {
-    if (g_gatewayNode > 0) {
-        String payload("{\"role\":\"light\",\"heartbeat\":");
-        payload += g_heartbeat++;
-        payload += ",\"node\":";
-        payload += mesh.getNodeId();
-        payload += "}";
-        mesh.sendSingle(g_gatewayNode, payload);
-    }
+    StaticJsonDocument<512> doc;
+    JsonObject obj;
+    String payload;
+
+    obj["role"] = "light";
+    obj["node"] = mesh.getNodeId();
+    obj["memory"] = ESP.getFreeHeap();
+    obj["model"] = ESP.getChipModel();
+    obj["counter"] = g_heartbeat++;
+    doc["heartbeat"] = obj;
+    doc["gateway"] = g_gatewayNode;
+    serializeJson(doc, payload);
+
+    sendToGateway(payload);
 }
 
 void identify(unsigned long color)
@@ -50,11 +61,22 @@ void identify(unsigned long color)
  */
 void receivedCallback(uint32_t from, String &msg) 
 {
-    StaticJsonDocument<256> doc;
+    StaticJsonDocument<1024> doc;
     DeserializationError error = deserializeJson(doc, msg);
     if (error) {
-        Serial.print(F("deserializeJson() failed: "));
-        Serial.println(error.f_str());
+        String payload;
+        String topic("pathlights/error/");
+        topic += mesh.getNodeId();
+        doc.clear();
+        JsonObject obj;
+        obj["response"] = "error";
+        obj["reason"] = "json";
+        obj["string"] = error.f_str();
+        obj["code"] = error.code();
+        obj["node"] = from;
+        doc["error"] = obj;
+        serializeJson(doc, payload);
+        sendToGateway(payload);
         return;
     }
 
@@ -115,7 +137,6 @@ void setup()
     pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
     pixels.clear();
     pixels.show();
-
 
     //mesh.setDebugMsgTypes( ERROR | MESH_STATUS | CONNECTION | SYNC | COMMUNICATION | GENERAL | MSG_TYPES | REMOTE ); // all types on
     mesh.setDebugMsgTypes( ERROR | STARTUP );  // set before init() so that you can see startup messages

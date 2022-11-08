@@ -6,24 +6,11 @@
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 #include <SPI.h>
 
-// Use dedicated hardware SPI pins
-Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
-
-// some gpio pin that is connected to an LED...
-// on my rig, this is 5, change to the right number of your LED.
-#ifdef LED_BUILTIN
-#define LED LED_BUILTIN
-#else
-#define LED 2
-#endif
-
-#define   BLINK_PERIOD    3000 // milliseconds until cycle repeat
-#define   BLINK_DURATION  100  // milliseconds LED is on for
-
-#define   MESH_PREFIX     "mesh"
-#define   MESH_PASSWORD   "somethingSneaky"
+#define   MESH_PREFIX     "bollards"
+#define   MESH_PASSWORD   "bollards4thewin"
 #define   MESH_PORT       5555
 
+Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 Scheduler userScheduler; // to control your personal task
 painlessMesh  mesh;
 WiFiClient ethClient;
@@ -100,13 +87,22 @@ void sendHeartbeat()
 // Needed for painless library
 void receivedCallback(uint32_t from, String &msg) 
 {
-    StaticJsonDocument<256> doc;
+    StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, msg);
     if (error) {
-        Serial.print("ERROR: ");
-        Serial.print(error.f_str());
-        Serial.print(" from");
-        Serial.println(mesh.getNodeId());
+        String payload;
+        String topic("pathlights/error/");
+        topic += mesh.getNodeId();
+        doc.clear();
+        JsonObject obj;
+        obj["response"] = "error";
+        obj["reason"] = "json";
+        obj["string"] = error.f_str();
+        obj["code"] = error.code();
+        obj["node"] = from;
+        doc["error"] = obj;
+        serializeJson(doc, payload);
+        mqttClient.publish(topic, payload);
         return;
     }
 
@@ -141,14 +137,18 @@ void newConnectionCallback(uint32_t nodeId)
     mesh.sendSingle(nodeId, payload);
 }
 
+/**
+ * Not sure what to use this for now, but will keep it for the future
+ */
 void changedConnectionCallback() 
 {
-//    Serial.printf("Changed connections\n");
 }
 
+/**
+ * Need to figure out what Node time is and see if I can use it in animations
+ */
 void nodeTimeAdjustedCallback(int32_t offset) 
 {
-//    Serial.printf("Adjusted time %u. Offset = %d\n", mesh.getNodeTime(),offset);
 }
 
 void connect() 
