@@ -9,15 +9,19 @@
 #define   MESH_PREFIX     "bollards"
 #define   MESH_PASSWORD   "bollards4thewin"
 #define   MESH_PORT       5555
+#define   APP_ID          1
+
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 Scheduler userScheduler; // to control your personal task
 painlessMesh  mesh;
-WiFiClient ethClient;
+EthernetClient ethClient;
 MQTTClient mqttClient(1024);
 IPAddress mqttServer(172, 24, 1, 12);
 uint32_t g_heartbeat = 0;
 uint32_t g_mqttMillis = 0;
+char g_version[16];
 
 // User stub
 void sendHeartbeat();
@@ -33,12 +37,13 @@ void updateDisplay()
     tft.fillScreen(ST77XX_BLACK);
     tft.setTextColor(ST77XX_WHITE);
     tft.setTextSize(2);
+    tft.printf("Version: %s\n", g_version);
     tft.printf("Active nodes: %d\n", nodes.size());
-    tft.printf("IP: %s", Ethernet.localIP().toString().c_str());
+    tft.printf("IP:   %s\n", Ethernet.localIP().toString().c_str());
     if (mqttClient.connected())
-        tft.printf("MQTT: %s", mqttServer.toString().c_str());
+        tft.printf("MQTT: %s\n", mqttServer.toString().c_str());
     else
-        tft.printf("MQTT disconnected");
+        tft.printf("MQTT disconnected\n");
 }
 
 /**
@@ -142,6 +147,9 @@ void newConnectionCallback(uint32_t nodeId)
  */
 void changedConnectionCallback() 
 {
+    String topic("pathlights/topology");
+    String payload = mesh.subConnectionJson();
+    mqttClient.publish(topic, payload);
 }
 
 /**
@@ -153,16 +161,19 @@ void nodeTimeAdjustedCallback(int32_t offset)
 
 void connect() 
 {
+    updateDisplay();
     while (!mqttClient.connect("mqtt-gw")) {
         Serial.print("Last Error: ");
         Serial.println(mqttClient.lastError());
         delay(500);
     }
     mqttClient.subscribe("pathlights/actions/#");
+    updateDisplay();
 }
 
 void setup() 
 {
+    sprintf(g_version, "%d.%d.%d", ESP_IDF_VERSION_MAJOR, ESP_IDF_VERSION_MINOR, APP_ID);
     Serial.begin(115200);
     // turn on backlite
     pinMode(TFT_BACKLITE, OUTPUT);
@@ -173,16 +184,28 @@ void setup()
     digitalWrite(TFT_I2C_POWER, HIGH);
     delay(10);
 
+    Ethernet.init(10);
+    
+    if (Ethernet.begin(mac) == 0) {
+        Serial.println("Failed to start ethernet wing");
+        if (Ethernet.hardwareStatus() == EthernetNoHardware) {
+            Serial.println("Shield not found");
+            while (1)
+                sleep(1);
+        }
+    }
+    Serial.print("Ethernet started: HW = ");
+    Serial.println(Ethernet.hardwareStatus());
+    
     // initialize TFT
     tft.init(135, 240); // Init ST7789 240x135
     tft.setRotation(3);
     tft.fillScreen(ST77XX_BLACK);
 
-    Ethernet.init(10);
-    
     mqttClient.begin(mqttServer, 1883, ethClient);
     mqttClient.onMessage(messageReceived);   //mesh.setDebugMsgTypes( ERROR | MESH_STATUS | CONNECTION | SYNC | COMMUNICATION | GENERAL | MSG_TYPES | REMOTE ); // all types on
     
+    Serial.println("mqtt started");
     mesh.setDebugMsgTypes( ERROR | STARTUP );  // set before init() so that you can see startup messages
 
     mesh.setRoot(true);
@@ -193,15 +216,15 @@ void setup()
     mesh.onChangedConnections(&changedConnectionCallback);
     mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
 
+    Serial.println("Mesh started");
     userScheduler.addTask(taskSendHeartbeat);
     taskSendHeartbeat.enable();
-    userScheduler.addTask(taskUpdateDisplay);
-    taskUpdateDisplay.enable();
 }
 
 void loop() 
 {
     mesh.update();
+    Ethernet.maintain();
 
     if (millis() - g_mqttMillis > 1000) {
         if (!mqttClient.connected()) {
@@ -209,7 +232,7 @@ void loop()
         }
         else
             mqttClient.loop();
-
+    
         g_mqttMillis = millis();
     }
 }

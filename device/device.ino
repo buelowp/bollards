@@ -118,15 +118,11 @@ void receivedCallback(uint32_t from, String &msg)
 void newConnectionCallback(uint32_t nodeId) 
 {
 }
-
-void changedConnectionCallback() 
-{
-}
-
+/*
 void nodeTimeAdjustedCallback(int32_t offset) 
 {
 }
-
+*/
 void setup() 
 {
     Serial.begin(115200);
@@ -144,8 +140,8 @@ void setup()
     mesh.init( MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT );
     mesh.onReceive(&receivedCallback);
     mesh.onNewConnection(&newConnectionCallback);
-    mesh.onChangedConnections(&changedConnectionCallback);
-    mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
+//    mesh.onChangedConnections(&changedConnectionCallback);
+//    mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
 
     Serial.println("Setup complete");
 }
