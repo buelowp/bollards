@@ -9,7 +9,7 @@
 #define   MESH_PREFIX     "bollards"
 #define   MESH_PASSWORD   "bollards4thewin"
 #define   MESH_PORT       5555
-#define   APP_ID          1
+#define   APP_ID          2
 
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 
@@ -79,12 +79,14 @@ void sendHeartbeat()
 {
     String topic("pathlights/heartbeat/");
     topic += mesh.getNodeId();
-    StaticJsonDocument<256> doc;
-    char buffer[256];
+    StaticJsonDocument<512> doc;
+    char buffer[512];
     doc["role"] = "gateway";
-    doc["heartbeat"] = g_heartbeat++;
     doc["memory"] = ESP.getFreeHeap();
     doc["node"] = mesh.getNodeId();
+    doc["model"] = ESP.getChipModel();
+    doc["uptime"] = esp_timer_get_time() / 1000000;
+    doc["version"] = g_version;
     int n = serializeJson(doc, buffer);
     mqttClient.publish(topic.c_str(), buffer, n);
 }

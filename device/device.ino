@@ -9,16 +9,17 @@
 #define MESH_PREFIX         "bollards"
 #define MESH_PASSWORD       "bollards4thewin"
 #define MESH_PORT           5555
+#define APP_ID              1
 
 Adafruit_NeoPixel pixels(NUMPIXELS, NEOPIXEL_PIN, NEO_RGBW + NEO_KHZ800);
 void sendHeartbeat();
 
 Scheduler     userScheduler; // to control your personal task
 painlessMesh  mesh;
-Task taskSendMessage(TASK_SECOND * 5, TASK_FOREVER, &sendHeartbeat);
+Task taskSendHeartbeat(TASK_SECOND * 5, TASK_FOREVER, &sendHeartbeat);
 
 uint32_t g_gatewayNode = 0;
-uint32_t g_heartbeat = 1;
+char g_version[16];
 
 void sendToGateway(String &payload)
 {
@@ -33,15 +34,13 @@ void sendToGateway(String &payload)
 void sendHeartbeat() 
 {
     StaticJsonDocument<512> doc;
-    JsonObject obj;
     String payload;
 
-    obj["role"] = "light";
-    obj["node"] = mesh.getNodeId();
-    obj["memory"] = ESP.getFreeHeap();
-    obj["model"] = ESP.getChipModel();
-    obj["counter"] = g_heartbeat++;
-    doc["heartbeat"] = obj;
+    doc["role"] = "light";
+    doc["node"] = mesh.getNodeId();
+    doc["memory"] = ESP.getFreeHeap();
+    doc["model"] = ESP.getChipModel();
+    doc["uptime"] = esp_timer_get_time() / 1000000;
     doc["gateway"] = g_gatewayNode;
     serializeJson(doc, payload);
 
@@ -125,6 +124,7 @@ void nodeTimeAdjustedCallback(int32_t offset)
 */
 void setup() 
 {
+    sprintf(g_version, "%d.%d.%d", ESP_IDF_VERSION_MAJOR, ESP_IDF_VERSION_MINOR, APP_ID);
     Serial.begin(115200);
 
     pinMode(NEOPIXEL_POWER, OUTPUT);
@@ -143,6 +143,7 @@ void setup()
 //    mesh.onChangedConnections(&changedConnectionCallback);
 //    mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
 
+    
     Serial.println("Setup complete");
 }
 
