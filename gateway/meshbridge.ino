@@ -41,7 +41,7 @@ bool g_afterSunset;
 bool g_afterEleven;
 bool g_afterSunrise;
 
-NTPClient timeClient(ntpClient, "pool.ntp.org", 0, ONE_MINUTE);
+NTPClient timeClient(ntpClient, "pool.ntp.org", 0, ONE_HOUR);
 
 const char* ntpServer = "pool.ntp.org";
 
