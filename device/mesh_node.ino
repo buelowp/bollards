@@ -3,10 +3,12 @@
 #include <ArduinoJson.h>
 #include <Adafruit_NeoPixel.h>
 #include <painlessMesh.h>
+#include <time.h>
+#include <sys/time.h>
 
 #define NEOPIXEL_PIN    5
 #define NUMPIXELS       24
-#define APP_ID          39
+#define APP_ID          42
 
 #define MESH_PREFIX         "bollards"
 #define MESH_PASSWORD       "bollards4thewin"
@@ -138,26 +140,40 @@ void receivedCallback(uint32_t from, String &msg)
                 }
             }
 
-            if (obj.containsKey("gateway")) {
+            if (obj.containsKey("gateway") && g_gatewayNode == 0) {
                 g_gatewayNode = obj["gateway"].as<unsigned int>();
                 sendHeartbeat();
                 pixels.clear();
                 pixels.show();
+                sendHello();
             }
         }
     }
 }
 
+void sendHello()
+{
+    StaticJsonDocument<256> doc;
+    char buffer[256];
+    JsonObject obj = doc.createNestedObject("statechange");
+    obj["node"] = g_node;
+    obj["action"] = "new";
+    int n = serializeJson(doc, buffer);
+
+    mesh.sendSingle(g_gatewayNode, buffer);
+}
+
 void newConnectionCallback(uint32_t nodeId) 
 {
+    if (g_gatewayNode) {
+        sendHello();
+    } 
 }
 
 void droppedConnectionCallback(uint32_t nodeId) 
 {
-    if (nodeId == g_gatewayNode) {
-        g_gatewayNode = 0;
-        setColor(255,0,0,0,100);
-    }
+    g_gatewayNode = 0;
+    setColor(255,0,0,0,100);
 }
 
 void nodeTimeAdjustedCallback(int32_t offset) 
@@ -180,7 +196,9 @@ void setup()
     mesh.onReceive(&receivedCallback);
     mesh.onNewConnection(&newConnectionCallback);
     mesh.onDroppedConnection(&droppedConnectionCallback);
+    mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
     mesh.initOTAReceive(g_role);
+    mesh.setContainsRoot(true);
     g_node = mesh.getNodeId();
 
     userScheduler.addTask(taskSendHeartbeat);
